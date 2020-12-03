@@ -1,0 +1,9 @@
+//create virtualenv 
+virtualenv flask
+
+//activate virtualenvionment 
+source flask/bin/activate
+
+//pip install flask 
+
+//chmod a+x app.py
