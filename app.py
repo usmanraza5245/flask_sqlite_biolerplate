@@ -54,6 +54,15 @@ def submitForm():
             return redirect("/")
     else:
         return redirect("/")
-       # pass
+
+
+@app.route('/ajax',methods=['POST','GET'])
+def servreAjax():
+    if request.method=='GET':
+        print("AJAX REQUEST RECIEVED ")
+        return jsonify({'tasks': {"name":"ahmed"}})
+
+
+
 if __name__ == '__main__':
     app.run(debug=True)
