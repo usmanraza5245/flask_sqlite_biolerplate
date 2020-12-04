@@ -5,7 +5,7 @@ from flask import g
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask import request
-
+import json
 
 app = Flask(__name__)
 #innitliaze DB
@@ -56,12 +56,18 @@ def submitForm():
         return redirect("/")
 
 
-@app.route('/ajax',methods=['POST','GET'])
+@app.route('/ajax',methods=['GET'])
 def servreAjax():
     if request.method=='GET':
-        print("AJAX REQUEST RECIEVED ")
-        return jsonify({'tasks': {"name":"ahmed"}})
-
+        try:
+           
+            print( request.args)
+            print("AJAX REQUEST RECIEVED ")
+            return jsonify({'tasks': {"name":"ahmed"}})
+        except Exception as e:
+            print("AJAX REQUEST RECIEVED --Excepption ")
+            print(e)
+            return jsonify({'tasks': {"name":"exception occurred"}})
 
 
 if __name__ == '__main__':
