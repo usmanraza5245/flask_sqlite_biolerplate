@@ -91,16 +91,17 @@
                 let formValue = $(this).val()
                 console.log(formValue)
                 $.ajax({
-                    type: 'GET',
+                    type: 'POST',
                     url: 'http://127.0.0.1:5000/ajax',
                     data: formValue,
                     // dataType: 'json',
                     success: function(data) {
                         console.log("in success")
                         console.log(data)
+
                     },
                     error: function(err) {
-                        cosnole.log("in error")
+                        console.log("in error")
                         console.log(err)
                     }
                 });

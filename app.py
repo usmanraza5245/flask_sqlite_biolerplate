@@ -1,11 +1,14 @@
 #!flask/bin/python
-from flask import Flask, jsonify ,render_template,redirect
+from flask import Flask, jsonify ,render_template, redirect
 import sqlite3
 from flask import g
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask import request
 import json
+from nlp_Algo import NlpAlgo
+#cerate Object 
+modelClass = NlpAlgo()
 
 app = Flask(__name__)
 #innitliaze DB
@@ -56,14 +59,15 @@ def submitForm():
         return redirect("/")
 
 
-@app.route('/ajax',methods=['GET'])
+@app.route('/ajax',methods=['POST'])
 def servreAjax():
-    if request.method=='GET':
+    if request.method=='POST':
         try:
-           
-            print( request.args)
-            print("AJAX REQUEST RECIEVED ")
-            return jsonify({'tasks': {"name":"ahmed"}})
+            keyword=request.get_data()
+            #send parametr to mdoel 
+            jsonDict=modelClass.Ranked_documents("google")
+            print(jsonDict)
+            return jsonify({'response': jsonDict}) #Maybe we are passing two arguments here? "Ranked_Documents takes 1 positional argument but two were given"
         except Exception as e:
             print("AJAX REQUEST RECIEVED --Excepption ")
             print(e)
