@@ -94,8 +94,9 @@ def createUser():
 
 
 @app.route('/user', methods=['GET'])
-@token_required
-def getAllUsers(current_user):
+# @token_required
+# def getAllUsers(current_user):
+def getAllUsers():
     try:
         data=[]
         users=db.users.find()
@@ -130,7 +131,8 @@ def login():
         errResponse = make_response(jsonify({"message":e,"success":False}), 500)
         return response
 
-@app.route('/seed', methods=['GET'])
+
+@app.route('/user/seed', methods=['GET'])
 def seed():
     try:
         data=User.seed()
@@ -140,22 +142,24 @@ def seed():
         errResponse = make_response(jsonify({"message":e,"success":False}), 500)
         return response
 
-@app.route('/target/profile', methods=['GET','POST'])
-def getTwitterProfile():
+@token_required
+@app.route('/user/targets/keywords', methods=['POST'])
+def getTwitterProfile(self,current_user):
    try:
         reqBody = request.get_json()
-        if(reqBody["targetUsername"]):
-            arr=[]
-            scrapper=sntwitter.TwitterProfileScraper(reqBody["targetUsername"])
-            for index,tweet in enumerate(scrapper.get_items()):
-                # arr.append([tweet.date,tweet.id,tweet.rawContent,tweet.user.username,tweet.likeCount,tweet.retweetCount])
-                arr.append(tweet)
-                if index>2:
-                    break
-            response = make_response(jsonify(arr), 200)
-            return response
-        else:
-            raise Exception("targetUsername is required!")
+        return jsonify(reqBody)
+        # if(reqBody["targetUsername"]):
+        #     arr=[]
+        #     scrapper=sntwitter.TwitterProfileScraper(reqBody["targetUsername"])
+        #     for index,tweet in enumerate(scrapper.get_items()):
+        #         # arr.append([tweet.date,tweet.id,tweet.rawContent,tweet.user.username,tweet.likeCount,tweet.retweetCount])
+        #         arr.append(tweet)
+        #         if index>2:
+        #             break
+        #     response = make_response(jsonify(arr), 200)
+        #     return response
+        # else:
+        #     raise Exception("targetUsername is required!")
    except Exception as e:
         errResponse = make_response(jsonify({"message":e}), 200)
         return response
