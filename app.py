@@ -12,7 +12,9 @@ import json
 from models.user import User
 from models.target import Target
 from utils.snsscrapper import Scrapper
+
 from config.db import db
+
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import uuid
@@ -43,7 +45,7 @@ def token_required(f):
         try:
             data = jwt.decode(
                 token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            authUser = db.users.find_one({'email': data["email"]})
+            authUser = db.users.find_one({'_id': ObjectId(data["_id"])})
             data = {"_id": str(authUser["_id"]), "username": authUser["username"],
                     "firstName": authUser["firstName"], "lastName": authUser["lastName"], "email": authUser["email"]}
         except Exception as e:
@@ -94,6 +96,7 @@ def createUser():
 @app.route('/user', methods=['GET'])
 @token_required
 def getAllUsers(authUser):
+    # def getAllUsers():
     try:
         data = []
         users = db.users.find()
@@ -128,7 +131,7 @@ def login():
         else:
             data = {"_id": str(user["_id"]), "email": user["username"], "firstName": user["firstName"],
                     "lastName": user["lastName"], "email": user["email"]}
-            token = jwt.encode({'email': data["email"], 'exp': datetime.datetime.utcnow(
+            token = jwt.encode({'_id': data["_id"], 'exp': datetime.datetime.utcnow(
             ) + datetime.timedelta(minutes=45)}, app.config['SECRET_KEY'], "HS256")
             response = make_response(jsonify(
                 {"data": data, "message": "Logged in successfully", "success": True, "token": token}), 200)
