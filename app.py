@@ -159,7 +159,7 @@ def setUserTargets(authUser):
         reqBody = request.get_json()
         if 'targetType' not in reqBody:
             return jsonify({"success": 'false', 'message': 'targetType is required.'}), 400
-        if reqBody['targetType'] != 'keywords' or if reqBody['targetType'] != 'hashtags' or if reqBody['targetType'] != 'username':
+        if reqBody['targetType'] != 'keywords' or reqBody['targetType'] != 'hashtags' or reqBody['targetType'] != 'username':
             return jsonify({"success": 'false', 'message': 'Invalid "targeType" .'}), 400
         if 'targets' not in reqBody and len(reqBody.targets) == 0:
             return jsonify({"success": 'false', 'message': 'targets is required.'}), 400
