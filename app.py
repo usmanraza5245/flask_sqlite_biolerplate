@@ -16,7 +16,8 @@ from functools import wraps
 import uuid
 import jwt
 import datetime
-# Github Token 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
+# Github Token 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
+# Github user ratroot92
 
 app = Flask(__name__)
 app.debug = True
@@ -230,5 +231,7 @@ def submitForm():
 
 
 if __name__ == '__main__':
-    app.run()
+    loop = asyncio.get_event_loop()
+    loop.create_task(app.run(port=5000, debug=True))
+    loop.run_forever()
     # flask --app app.py --debug run
