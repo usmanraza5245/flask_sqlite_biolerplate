@@ -91,9 +91,9 @@ def createUser():
 
 
 @app.route('/user', methods=['GET'])
-# @token_required
-# def getAllUsers(authUser):
-def getAllUsers():
+@token_required
+def getAllUsers(authUser):
+    # def getAllUsers():
     try:
         data = []
         users = db.users.find()
