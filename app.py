@@ -49,7 +49,7 @@ def token_required(f):
             data = {"_id": str(authUser["_id"]), "username": authUser["username"],
                     "firstName": authUser["firstName"], "lastName": authUser["lastName"], "email": authUser["email"]}
         except Exception as e:
-            return jsonify({'message': e})
+            return jsonify({'message': 'Invalid Token'})
 
         return f(data, *args, **kwargs)
     return decorator
@@ -142,6 +142,33 @@ def login():
         return response
 
 
+@app.route('/user', methods=['DELETE'])
+@token_required
+def delete_user(authUser):
+    try:
+        print('authUser...', authUser)
+
+        # delete all targets of provided user.
+
+        targetResponse = db.targets.delete_many({'user': authUser['_id']})
+
+        # convert auth user into object id
+        user_id = ObjectId(authUser["_id"])
+        print('user id...', user_id)
+        # if found, delete user
+        result = db.users.delete_one({'_id': user_id})
+        print('result...', result)
+        if result.deleted_count == 1:
+            return jsonify({'message': 'User deleted successfully'})
+
+        else:
+            return jsonify({'error': 'Error deleting user'})
+
+    except Exception as exp:
+        print('exception...', exp)
+        return jsonify({'error': 'Error while deleting user'})
+
+
 @app.route('/user/seed', methods=['GET'])
 def seed():
     try:
@@ -162,35 +189,37 @@ def setUserTargets(authUser):
         reqBody = request.get_json()
         if 'targetType' not in reqBody:
             return jsonify({"success": 'false', 'message': 'targetType is required.'}), 400
-        if reqBody['targetType'] != 'keywords' or reqBody['targetType'] != 'hashtags' or reqBody['targetType'] != 'username':
-            return jsonify({"success": 'false', 'message': 'Invalid "targeType" .'}), 400
-        if 'targets' not in reqBody and len(reqBody.targets) == 0:
+        # if reqBody['targetType'] != 'keywords' or reqBody['targetType'] != 'hashtags' or reqBody['targetType'] != 'username':
+        #     return jsonify({"success": 'false', 'message': 'Invalid "targeType" .'}), 400
+        if 'targets' not in reqBody and len(reqBody['targets']) == 0:
             return jsonify({"success": 'false', 'message': 'targets is required.'}), 400
         exist = Target.TargetExist(reqBody)
-        scrapper = Scrapper()
-        scrapper.scrapKeywords(reqBody)
+        # scrapper = Scrapper()
+        # scrapper.scrapKeywords(reqBody)
         # return ""
-        # if not exist:
-        #     target = Target(
-        #         targetType=reqBody["targetType"],
-        #         targets=reqBody["targets"],
-        #         user=authUser['_id']
-        #     )
-        #     target = db.targets.insert_one(target.toDictionary())
-        #     target = db.targets.find_one({'_id': target.inserted_id})
-        #     data = {"_id": str(target["_id"]), "targetType": target["targetType"],
-        #             "targets": target["targets"], "user": target["user"]}
-        #     response = make_response(jsonify(
-        #         {"data": data, "message": "Target created successfully", "success": True}), 200)
-        #     return response
-        # else:
-        #     response = make_response(jsonify(
-        #         {"data": [], "message": "Target Type '" + reqBody["targetType"]+"' already exists.", "success": True, }), 200)
-        #     return response
+        if not exist:
+            target = Target(
+                targetType=reqBody["targetType"],
+                targets=reqBody["targets"],
+                user=authUser['_id']
+            )
+            target = db.targets.insert_one(target.toDictionary())
+            target = db.targets.find_one({'_id': target.inserted_id})
+            data = {"_id": str(target["_id"]), "targetType": target["targetType"],
+                    "targets": target["targets"], "user": target["user"]}
+            response = make_response(jsonify(
+                {"data": data, "message": "Target created successfully", "success": True}), 200)
+            return response
+        else:
+            response = make_response(jsonify(
+                {"data": [], "message": "Target Type '" + reqBody["targetType"]+"' already exists.", "success": True, }), 200)
+            return response
 
     except Exception as e:
-        errResponse = make_response(jsonify({"message": e}), 200)
-        return response
+        print('kkkk', e)
+        errResponse = make_response(
+            jsonify({"message": 'something went wrong'}), 500)
+        return errResponse
 
 
 @app.route('/user/targets/keywords', methods=['GET'])

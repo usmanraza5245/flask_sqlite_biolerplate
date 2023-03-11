@@ -18,7 +18,6 @@ class Target():
     @staticmethod
     def TargetExist(query):
         target = db.targets.find_one(query)
-        target["_id"] = str(target._id)
         if target:
             return target
         else:
