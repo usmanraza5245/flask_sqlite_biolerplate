@@ -45,7 +45,7 @@ def token_required(f):
            return jsonify({'message': 'a valid token is missing'})
        try:
            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-           current_user = Users.query.filter_by(public_id=data['public_id']).first()
+           current_user = db.users.find_one({'_id':data["_id"]})
        except:
            return jsonify({'message': 'token is invalid'})
  
@@ -95,7 +95,7 @@ def createUser():
 
 @app.route('/user', methods=['GET'])
 @token_required
-def getAllUsers():
+def getAllUsers(current_user):
     try:
         data=[]
         users=db.users.find()
