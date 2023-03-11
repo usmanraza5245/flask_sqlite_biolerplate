@@ -9,6 +9,7 @@ import snscrape.modules.twitter as sntwitter
 from datetime import datetime
 import json
 from models.user import User
+from config.db import db 
 
 from werkzeug.security import generate_password_hash,check_password_hash
 from functools import wraps
@@ -19,7 +20,7 @@ import datetime
 
 app = Flask(__name__)
 app.debug = True
-
+app.config['SECRET_KEY']='004f2af45d3a4e161a7dd2d17fdae47f'
 
 # innitliaze DB
 
@@ -30,6 +31,26 @@ app.debug = True
 
 
 
+
+
+
+def token_required(f):
+   @wraps(f)
+   def decorator(*args, **kwargs):
+       token = None
+       if 'x-access-tokens' in request.headers:
+           token = request.headers['x-access-tokens']
+ 
+       if not token:
+           return jsonify({'message': 'a valid token is missing'})
+       try:
+           data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+           current_user = Users.query.filter_by(public_id=data['public_id']).first()
+       except:
+           return jsonify({'message': 'token is invalid'})
+ 
+       return f(current_user, *args, **kwargs)
+   return decorator
 
 
 
@@ -71,7 +92,9 @@ def createUser():
 
 
 
+
 @app.route('/user', methods=['GET'])
+@token_required
 def getAllUsers():
     try:
         data=[]
@@ -100,7 +123,8 @@ def login():
             return response
         else:
             data ={"_id": str(user["_id"]),"email":user["username"],"firstName":user["firstName"],"lastName":user["lastName"],"email":user["email"]}
-            response = make_response(jsonify({"data":data,"message":"Logged in successfully","success":True}), 200)
+            token = jwt.encode({'_id' : data["_id"], 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=45)}, app.config['SECRET_KEY'], "HS256")
+            response = make_response(jsonify({"data":data,"message":"Logged in successfully","success":True,"token":token}), 200)
             return response
     except Exception as e:
         errResponse = make_response(jsonify({"message":e,"success":False}), 500)
