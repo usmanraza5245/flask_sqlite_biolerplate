@@ -4,12 +4,14 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime
 from flask import request
+import asyncio
 import json
 import snscrape.modules.twitter as sntwitter
 from datetime import datetime
 import json
 from models.user import User
 from models.target import Target
+from utils.snsscrapper import Scrapper
 from config.db import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
@@ -162,23 +164,26 @@ def setUserTargets(authUser):
         if 'targets' not in reqBody and len(reqBody.targets) == 0:
             return jsonify({"success": 'false', 'message': 'targets is required.'}), 400
         exist = Target.TargetExist(reqBody)
-        if not exist:
-            target = Target(
-                targetType=reqBody["targetType"],
-                targets=reqBody["targets"],
-                user=authUser['_id']
-            )
-            target = db.targets.insert_one(target.toDictionary())
-            target = db.targets.find_one({'_id': target.inserted_id})
-            data = {"_id": str(target["_id"]), "targetType": target["targetType"],
-                    "targets": target["targets"], "user": target["user"]}
-            response = make_response(jsonify(
-                {"data": data, "message": "Target created successfully", "success": True}), 200)
-            return response
-        else:
-            response = make_response(jsonify(
-                {"data": [], "message": "Target Type '" + reqBody["targetType"]+"' already exists.", "success": True, }), 200)
-            return response
+        scrapper = Scrapper()
+        scrapper.scrapKeywords(reqBody)
+        # return ""
+        # if not exist:
+        #     target = Target(
+        #         targetType=reqBody["targetType"],
+        #         targets=reqBody["targets"],
+        #         user=authUser['_id']
+        #     )
+        #     target = db.targets.insert_one(target.toDictionary())
+        #     target = db.targets.find_one({'_id': target.inserted_id})
+        #     data = {"_id": str(target["_id"]), "targetType": target["targetType"],
+        #             "targets": target["targets"], "user": target["user"]}
+        #     response = make_response(jsonify(
+        #         {"data": data, "message": "Target created successfully", "success": True}), 200)
+        #     return response
+        # else:
+        #     response = make_response(jsonify(
+        #         {"data": [], "message": "Target Type '" + reqBody["targetType"]+"' already exists.", "success": True, }), 200)
+        #     return response
 
     except Exception as e:
         errResponse = make_response(jsonify({"message": e}), 200)
