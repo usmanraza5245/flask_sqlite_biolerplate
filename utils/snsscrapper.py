@@ -29,10 +29,11 @@ class Scrapper:
             print(f"Matched {result.matched_count} documents.")
             print(f"Modified {result.modified_count} documents.")
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+
         elif (target['targetType'] == 'twitter-hashtag'):
             for keyword in eval(target['targets']):
                 tweets = []
-                snsScrapper = sntwitter.TwitterSearchScraper('#'+keyword)
+                snsScrapper = sntwitter.TwitterHashtagScraper('#'+keyword)
                 for counter, tweet in enumerate(snsScrapper.get_items()):
                     if counter > 10:
                         break
@@ -50,14 +51,14 @@ class Scrapper:
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
         elif (target['targetType'] == 'twitter-user'):
-            for keyword in eval(target['targets']):
+            for username in eval(target['targets']):
                 tweets = []
-                snsScrapper = sntwitter.TwitterUserScraper(keyword)
+                snsScrapper = sntwitter.TwitterUserScraper(username)
                 for counter, tweet in enumerate(snsScrapper.get_items()):
                     if counter > 10:
                         break
                     tweets.append({
-                        'keyword': keyword,
+                        'username': username,
                         'date': tweet.date,
                         'id': tweet.id,
                         'rawContent': tweet.rawContent,
