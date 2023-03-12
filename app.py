@@ -205,6 +205,42 @@ def getUserTargets(authUser):
         return Utils.ErrorResponse('Someting went wrong.')
 
 
+@app.route('/user/targets/keywords', methods=['PUT'])
+@token_required
+def updateUserTargets(authUser):
+    try:
+        reqBody = request.get_json()
+        if 'targetType' not in reqBody:
+            return Utils.BadRequestResponse('targetType is required.')
+
+        if reqBody['targetType'] != 'keywords' and reqBody['targetType'] != 'twitter-hashtag' and reqBody['targetType'] != 'twitter-user':
+            return Utils.BadRequestResponse('Invalid "targetType" .')
+
+        if 'targets' not in reqBody and len(reqBody['targets']) == 0:
+            return Utils.BadRequestResponse('targets is required.')
+
+        if 'limit' not in reqBody:
+            return Utils.BadRequestResponse('limit is required.')
+
+        if reqBody['limit'] > 1000:
+            return Utils.BadRequestResponse('maximum limit is 1000.')
+        exist = Target.TargetExist(reqBody)
+        if exist:
+            target = db.targets.update_one({'_id': ObjectId(exist['_id'])}, {"$set": {'targets': reqBody['targets'], 'tweets': [], 'limit': reqBody['limit'], 'status': 0}})
+            if target.matched_count > 0 and target.modified_count > 0:
+                target = db.targets.find_one({'_id': ObjectId(exist['_id'])})
+                target['_id'] = str(target['_id'])
+                target['user'] = str(target['user'])
+                return Utils.SuccessResponse(target, "Target updated successfully")
+            else:
+                return Utils.NotFoundResponse(exist, "Failed to update target.")
+        else:
+            return Utils.NotFoundResponse({}, "Target not found.")
+    except Exception as e:
+        print(e)
+        return Utils.ErrorResponse('Someting went wrong.')
+
+
 @app.route('/user/targets/keywords', methods=['DELETE'])
 @token_required
 def deleteUserTargets(authUser):
