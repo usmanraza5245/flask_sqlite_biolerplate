@@ -12,14 +12,18 @@ import json
 from models.user import User
 from models.target import Target
 from utils.snsscrapper import Scrapper
-
 from config.db import db
-
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import uuid
 import jwt
 import datetime
+from multiprocessing import Queue, Process
+import time
+import threading
+import queue
+
+
 # Github Token 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
 # Github user ratroot92
 
@@ -39,18 +43,14 @@ def token_required(f):
         token = None
         if 'x-access-tokens' in request.headers:
             token = request.headers['x-access-tokens']
-
         if not token:
             return jsonify({'message': 'a valid token is missing'})
         try:
-            data = jwt.decode(
-                token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            authUser = db.users.find_one({'_id': ObjectId(data["_id"])})
-            data = {"_id": str(authUser["_id"]), "username": authUser["username"],
-                    "firstName": authUser["firstName"], "lastName": authUser["lastName"], "email": authUser["email"]}
+            tokenPayload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            authUser = db.users.find_one({'_id': ObjectId(tokenPayload['_id'])})
+            data = {"_id": str(authUser["_id"]), "username": authUser["username"], "firstName": authUser["firstName"], "lastName": authUser["lastName"], "_id": authUser["_id"]}
         except Exception as e:
-            return jsonify({'message': 'Invalid Token'})
-
+            return make_response(jsonify({'message': 'unautorized'}), 401)
         return f(data, *args, **kwargs)
     return decorator
 
@@ -65,7 +65,7 @@ def createUser():
     try:
         reqBody = request.get_json()
         if reqBody is None:
-            return jsonify({"success": 'false', 'message': 'Invalid JSON'}), 400
+            return jsonify({"success": False, 'message': 'Invalid JSON'}), 400
         user = User(
             firstName=reqBody["firstName"],
             lastName=reqBody["lastName"],
@@ -85,7 +85,7 @@ def createUser():
             return response
         else:
             response = make_response(
-                jsonify({"message": "User already exists", "success": False}), 200)
+                jsonify({"message": "User already exists", "success": False}), 404)
             return response
     except Exception as e:
         errResponse = make_response(
@@ -96,7 +96,6 @@ def createUser():
 @app.route('/user', methods=['GET'])
 @token_required
 def getAllUsers(authUser):
-    # def getAllUsers():
     try:
         data = []
         users = db.users.find()
@@ -117,9 +116,9 @@ def login():
     try:
         reqBody = request.get_json()
         if 'email' not in reqBody:
-            return jsonify({"success": 'false', 'message': 'email is required.'}), 400
+            return jsonify({"success": False, 'message': 'email is required.'}), 400
         if 'password' not in reqBody:
-            return jsonify({"success": 'false', 'message': 'password is required.'}), 400
+            return jsonify({"success": False, 'message': 'password is required.'}), 400
 
         user = User.UserExists(
             {'email': reqBody['email'], 'password': reqBody['password']})
@@ -135,6 +134,7 @@ def login():
             ) + datetime.timedelta(minutes=45)}, app.config['SECRET_KEY'], "HS256")
             response = make_response(jsonify(
                 {"data": data, "message": "Logged in successfully", "success": True, "token": token}), 200)
+            # response.headers['Content-type'] = 'application/json; charset=utf-8'
             return response
     except Exception as e:
         errResponse = make_response(
@@ -180,6 +180,15 @@ def seed():
         errResponse = make_response(
             jsonify({"message": e, "success": False}), 500)
         return response
+# Define some heavy function
+
+
+def scrapLater(exist):
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>*")
+    print(">>>", exist)
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>*")
+    Scrapper.scrapKeywords(exist)
+    print("Process Complete!!!")
 
 
 @app.route('/user/targets/keywords', methods=['POST'])
@@ -188,87 +197,69 @@ def setUserTargets(authUser):
     try:
         reqBody = request.get_json()
         if 'targetType' not in reqBody:
-            return jsonify({"success": 'false', 'message': 'targetType is required.'}), 400
-        # if reqBody['targetType'] != 'keywords' or reqBody['targetType'] != 'hashtags' or reqBody['targetType'] != 'username':
-        #     return jsonify({"success": 'false', 'message': 'Invalid "targeType" .'}), 400
+            return make_response(jsonify({"success": False, 'message': 'targetType is required.'}), 400)
+
+        if reqBody['targetType'] != 'keywords' and reqBody['targetType'] != 'twitter-hashtag' and reqBody['targetType'] != 'twitter-user':
+            return make_response(jsonify({"success": False, 'message': 'Invalid "targetType" .'}), 400)
+
         if 'targets' not in reqBody and len(reqBody['targets']) == 0:
-            return jsonify({"success": 'false', 'message': 'targets is required.'}), 400
+            return make_response(jsonify({"success": False, 'message': 'targets is required.'}), 400)
+
+        if 'limit' not in reqBody:
+            return make_response(jsonify({"success": False, 'message': 'limit is required.'}), 400)
+
+        if reqBody['limit'] > 1000:
+            return make_response(jsonify({"success": False, 'message': 'maximum limit is 1000.'}), 400)
+
         exist = Target.TargetExist(reqBody)
-        # scrapper = Scrapper()
-        # scrapper.scrapKeywords(reqBody)
-        # return ""
         if not exist:
-            target = Target(
-                targetType=reqBody["targetType"],
-                targets=reqBody["targets"],
-                user=authUser['_id']
-            )
+            target = Target(targetType=reqBody["targetType"], targets=reqBody["targets"], limit=reqBody['limit'], user=authUser['_id'])
             target = db.targets.insert_one(target.toDictionary())
             target = db.targets.find_one({'_id': target.inserted_id})
-            data = {"_id": str(target["_id"]), "targetType": target["targetType"],
-                    "targets": target["targets"], "user": target["user"]}
-            response = make_response(jsonify(
-                {"data": data, "message": "Target created successfully", "success": True}), 200)
+            target['_id'] = str(target['_id'])
+            target['user'] = str(target['user'])
+            heavyTask = Process(target=scrapLater, args=(target,))
+            heavyTask.start()
+            response = make_response(jsonify({"data": target, "message": "Target created successfully", "success": True}), 200)
             return response
         else:
-            response = make_response(jsonify(
-                {"data": [], "message": "Target Type '" + reqBody["targetType"]+"' already exists.", "success": True, }), 200)
+            response = make_response(jsonify({"data": exist, "message": "Target Type '" + reqBody["targetType"]+"' already exists.", "success": True, }), 404)
             return response
 
     except Exception as e:
-        print('kkkk', e)
-        errResponse = make_response(
-            jsonify({"message": 'something went wrong'}), 500)
-        return errResponse
+        errResponse = make_response(jsonify({"message": e}), 500)
+        return response
+
 
 
 @app.route('/user/targets/keywords', methods=['GET'])
 @token_required
 def getUserTargets(authUser):
     try:
-        targets = db.targets.find({'user': authUser['_id']})
-        data = []
-        for target in targets:
-            data.append({"_id": str(target["_id"]), "targetType": target["targetType"],
-                        "targets": target["targets"], "user": target["user"]})
-        response = make_response(jsonify(
-            {"data": data, "message": "Target created successfully", "success": True}), 200)
+        data = Target.GetUserTargets(authUser)
+        response = make_response(jsonify({"data": data, "message": "All user targets.", "success": True}), 200)
         return response
     except Exception as e:
-        errResponse = make_response(jsonify({"message": e}), 200)
+        errResponse = make_response(jsonify({"message": e}), 500)
         return response
 
 
-@app.route('/target', methods=['GET', 'POST'])
-def any():
+@app.route('/user/targets/keywords', methods=['DELETE'])
+@token_required
+def deleteUserTargets(authUser):
     try:
         reqBody = request.get_json()
-
+        if 'targetType' not in reqBody:
+            return jsonify({"success": False, 'message': 'targetType is required.'}), 400
+        else:
+            db.targets.delete_many({'user': authUser['_id']})
+            response = make_response(jsonify(
+                {"data": [], "message": "All users targets deleted successfully", "success": True}), 200)
+            return response
     except Exception as e:
-        errResponse = make_response(jsonify({"message": e}), 200)
-        return response
-
-
-@app.route('/submitForm', methods=['POST', 'GET'])
-def submitForm():
-    if request.method == "POST":
-        # fetch values from post form
-        inputFromForm = request.form['text']
-        # save to db
-        try:
-            newSuggestionObject = Suggestions(suggestion1="suggesttion1", suggestion2="suggesttion2",
-                                              suggestion3="suggesttion3", suggestion4="suggesttion4", suggestion5="suggesttion5")
-            db.session.add(newSuggestionObject)
-            db.session.commit()
-            return redirect("/")
-        except Exception as e:
-            return redirect("/")
-    else:
-        return redirect("/")
+        errResponse = make_response(jsonify({"message": e}), 500)
+        return errResponse
 
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    loop.create_task(app.run(port=5000, debug=True))
-    loop.run_forever()
-    # flask --app app.py --debug run
+    app.run(port=5000, debug=True)
