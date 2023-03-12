@@ -152,11 +152,8 @@ def seed():
 
 
 def scrapLater(exist):
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>*")
-    print(">>>", exist)
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>*")
     Scrapper.scrapKeywords(exist)
-    print("Process Complete!!!")
+    print("Process Complete!!! for "+exist['_id']+" " + exist['targetType'])
 
 
 @app.route('/user/targets/keywords', methods=['POST'])
@@ -186,8 +183,8 @@ def setUserTargets(authUser):
             target = db.targets.find_one({'_id': target.inserted_id})
             target['_id'] = str(target['_id'])
             target['user'] = str(target['user'])
-            heavyTask = Process(target=scrapLater, args=(target,))
-            heavyTask.start()
+            # heavyTask = Process(target=scrapLater, args=(target,))
+            # heavyTask.start()
             return Utils.SuccessResponse(target, "Target created successfully")
         else:
             response = Utils.NotFoundResponse(exist, "Target Type '" + reqBody["targetType"]+"' already exists.")
@@ -223,7 +220,10 @@ def deleteUserTargets(authUser):
 
 
 def my_scheduler():
-    print("Scheduler function called")
+    targets = db.targets.find({})
+    for target in targets:
+        target['_id'] = str(target['_id'])
+        scrapLater(target)
 
 
 @app.before_first_request
@@ -231,7 +231,7 @@ def activate_scheduler():
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(func=my_scheduler, trigger='interval', seconds=10)
     scheduler.start()
-    print("Scheduler started")
+    print(" >>> Scheduler started")
 
 
 if __name__ == '__main__':
