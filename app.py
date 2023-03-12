@@ -15,14 +15,10 @@ from utils.snsscrapper import Scrapper
 from config.db import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-import uuid
 import jwt
 import datetime
-from multiprocessing import Queue, Process
-import time
-import threading
-import queue
-
+from multiprocessing import Process
+from utils.util import Utils
 
 # Github Token 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
 # Github user ratroot92
@@ -44,14 +40,16 @@ def token_required(f):
         if 'x-access-tokens' in request.headers:
             token = request.headers['x-access-tokens']
         if not token:
-            return jsonify({'message': 'a valid token is missing'})
+            print(">>>>>>>>>>>>>>", request.headers['x-access-tokens'])
+            return Utils.UnauthorizedResponse('Missing access token.')
         try:
             tokenPayload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
             authUser = db.users.find_one({'_id': ObjectId(tokenPayload['_id'])})
-            data = {"_id": str(authUser["_id"]), "username": authUser["username"], "firstName": authUser["firstName"], "lastName": authUser["lastName"], "_id": authUser["_id"]}
+            authUser['_id'] = str(authUser['_id'])
+            # data = {"_id": str(authUser["_id"]), "username": authUser["username"], "firstName": authUser["firstName"], "lastName": authUser["lastName"], "_id": authUser["_id"]}
         except Exception as e:
-            return make_response(jsonify({'message': 'unautorized'}), 401)
-        return f(data, *args, **kwargs)
+            return Utils.UnauthorizedResponse(e)
+        return f(authUser, *args, **kwargs)
     return decorator
 
 
@@ -61,7 +59,8 @@ def __repr__(self):
 
 
 @app.route('/user', methods=['POST'])
-def createUser():
+@token_required
+def createUser(authUser):
     try:
         reqBody = request.get_json()
         if reqBody is None:
@@ -78,19 +77,13 @@ def createUser():
         if not exists:
             user = db.users.insert_one(user.toDictionary())
             user = db.users.find_one({'_id': user.inserted_id})
-            data = {"_id": str(user["_id"]), "username": user["username"],
-                    "firstName": user["firstName"], "lastName": user["lastName"], "email": user["email"]}
-            response = make_response(jsonify(
-                {"data": data, "message": "User created successfully", "success": True}), 200)
-            return response
+            user['_id'] = str(user['_id'])
+            # data = {"_id": str(user["_id"]), "username": user["username"], "firstName": user["firstName"], "lastName": user["lastName"], "email": user["email"]}
+            return Utils.SuccessResponse(user, "User created successfully")
         else:
-            response = make_response(
-                jsonify({"message": "User already exists", "success": False}), 404)
-            return response
+            return Utils.NotFoundResponse(user, "User already exists")
     except Exception as e:
-        errResponse = make_response(
-            jsonify({"message": e, "success": False}), 500)
-        return response
+        return Utils.ErrorResponse('Someting went wrong.')
 
 
 @app.route('/user', methods=['GET'])
@@ -102,13 +95,9 @@ def getAllUsers(authUser):
         for user in users:
             data.append({"_id": str(user["_id"]), "username": user["username"],
                         "firstName": user["firstName"], "lastName": user["lastName"], "email": user["email"]})
-        response = make_response(
-            jsonify({"data": data, "message": "All users", "success": True}), 200)
-        return response
+        return Utils.SuccessResponse(data, "All users")
     except Exception as e:
-        errResponse = make_response(
-            jsonify({"message": e, "success": False}), 500)
-        return response
+        return Utils.ErrorResponse('Someting went wrong.')
 
 
 @app.route('/login', methods=['POST'])
@@ -116,70 +105,46 @@ def login():
     try:
         reqBody = request.get_json()
         if 'email' not in reqBody:
-            return jsonify({"success": False, 'message': 'email is required.'}), 400
+            return Utils.BadRequestResponse('email is required.')
         if 'password' not in reqBody:
-            return jsonify({"success": False, 'message': 'password is required.'}), 400
-
-        user = User.UserExists(
-            {'email': reqBody['email'], 'password': reqBody['password']})
+            return Utils.BadRequestResponse('password is required.')
+        user = User.UserExists({'email': reqBody['email'], 'password': reqBody['password']})
         if not user:
-
-            response = make_response(
-                jsonify({"data": {}, "message": "Invalid credentials", "success": False}), 401)
-            return response
+            return Utils.UnauthorizedResponse('Invalid credentials.')
         else:
-            data = {"_id": str(user["_id"]), "email": user["username"], "firstName": user["firstName"],
-                    "lastName": user["lastName"], "email": user["email"]}
+            data = {"_id": str(user["_id"]), "email": user["username"], "firstName": user["firstName"], "lastName": user["lastName"], "email": user["email"]}
             token = jwt.encode({'_id': data["_id"], 'exp': datetime.datetime.utcnow(
             ) + datetime.timedelta(minutes=45)}, app.config['SECRET_KEY'], "HS256")
-            response = make_response(jsonify(
-                {"data": data, "message": "Logged in successfully", "success": True, "token": token}), 200)
-            # response.headers['Content-type'] = 'application/json; charset=utf-8'
+            response = make_response(jsonify({"data": data, "message": "Logged in successfully", "success": True, "token": token}), 200)
             return response
     except Exception as e:
-        errResponse = make_response(
-            jsonify({"message": e, "success": False}), 500)
-        return response
+        print(e)
+        return Utils.ErrorResponse('Someting went wrong.')
 
 
 @app.route('/user', methods=['DELETE'])
 @token_required
 def delete_user(authUser):
     try:
-        print('authUser...', authUser)
-
-        # delete all targets of provided user.
-
-        targetResponse = db.targets.delete_many({'user': authUser['_id']})
-
-        # convert auth user into object id
-        user_id = ObjectId(authUser["_id"])
-        print('user id...', user_id)
-        # if found, delete user
-        result = db.users.delete_one({'_id': user_id})
-        print('result...', result)
+        db.targets.delete_many({'user': authUser['_id']})
+        userId = ObjectId(authUser["_id"])
+        result = db.users.delete_one({'_id': userId})
         if result.deleted_count == 1:
-            return jsonify({'message': 'User deleted successfully'})
-
+            return Utils.SuccessResponse(result, "User deleted successfully")
         else:
-            return jsonify({'error': 'Error deleting user'})
+            return Utils.NotFoundResponse(userId, 'Error deleting user')
 
-    except Exception as exp:
-        print('exception...', exp)
-        return jsonify({'error': 'Error while deleting user'})
+    except Exception as e:
+        return Utils.ErrorResponse('Someting went wrong.')
 
 
 @app.route('/user/seed', methods=['GET'])
 def seed():
     try:
         data = User.seed()
-        response = make_response(jsonify(
-            {"data": data, "message": "User seed successfully", "success": True}), 200)
-        return response
+        return Utils.SuccessResponse(data, "User seed successfully")
     except Exception as e:
-        errResponse = make_response(
-            jsonify({"message": e, "success": False}), 500)
-        return response
+        return Utils.ErrorResponse('Someting went wrong.')
 # Define some heavy function
 
 
@@ -197,19 +162,19 @@ def setUserTargets(authUser):
     try:
         reqBody = request.get_json()
         if 'targetType' not in reqBody:
-            return make_response(jsonify({"success": False, 'message': 'targetType is required.'}), 400)
+            return Utils.BadRequestResponse('targetType is required.')
 
         if reqBody['targetType'] != 'keywords' and reqBody['targetType'] != 'twitter-hashtag' and reqBody['targetType'] != 'twitter-user':
-            return make_response(jsonify({"success": False, 'message': 'Invalid "targetType" .'}), 400)
+            return Utils.BadRequestResponse('Invalid "targetType" .')
 
         if 'targets' not in reqBody and len(reqBody['targets']) == 0:
-            return make_response(jsonify({"success": False, 'message': 'targets is required.'}), 400)
+            return Utils.BadRequestResponse('targets is required.')
 
         if 'limit' not in reqBody:
-            return make_response(jsonify({"success": False, 'message': 'limit is required.'}), 400)
+            return Utils.BadRequestResponse('limit is required.')
 
         if reqBody['limit'] > 1000:
-            return make_response(jsonify({"success": False, 'message': 'maximum limit is 1000.'}), 400)
+            return Utils.BadRequestResponse('maximum limit is 1000.')
 
         exist = Target.TargetExist(reqBody)
         if not exist:
@@ -220,16 +185,14 @@ def setUserTargets(authUser):
             target['user'] = str(target['user'])
             heavyTask = Process(target=scrapLater, args=(target,))
             heavyTask.start()
-            response = make_response(jsonify({"data": target, "message": "Target created successfully", "success": True}), 200)
-            return response
+            return Utils.SuccessResponse(target, "Target created successfully")
         else:
-            response = make_response(jsonify({"data": exist, "message": "Target Type '" + reqBody["targetType"]+"' already exists.", "success": True, }), 404)
+            response = Utils.NotFoundResponse(exist, "Target Type '" + reqBody["targetType"]+"' already exists.")
             return response
 
     except Exception as e:
-        errResponse = make_response(jsonify({"message": e}), 500)
-        return response
-
+        print(e)
+        return Utils.ErrorResponse('Someting went wrong.')
 
 
 @app.route('/user/targets/keywords', methods=['GET'])
@@ -237,11 +200,9 @@ def setUserTargets(authUser):
 def getUserTargets(authUser):
     try:
         data = Target.GetUserTargets(authUser)
-        response = make_response(jsonify({"data": data, "message": "All user targets.", "success": True}), 200)
-        return response
+        return Utils.SuccessResponse(data, "All user targets.")
     except Exception as e:
-        errResponse = make_response(jsonify({"message": e}), 500)
-        return response
+        return Utils.ErrorResponse('Someting went wrong.')
 
 
 @app.route('/user/targets/keywords', methods=['DELETE'])
@@ -253,12 +214,9 @@ def deleteUserTargets(authUser):
             return jsonify({"success": False, 'message': 'targetType is required.'}), 400
         else:
             db.targets.delete_many({'user': authUser['_id']})
-            response = make_response(jsonify(
-                {"data": [], "message": "All users targets deleted successfully", "success": True}), 200)
-            return response
+            return Utils.SuccessResponse(authUser['_id'], "All users targets deleted successfully")
     except Exception as e:
-        errResponse = make_response(jsonify({"message": e}), 500)
-        return errResponse
+        return Utils.ErrorResponse('Someting went wrong.')
 
 
 if __name__ == '__main__':
