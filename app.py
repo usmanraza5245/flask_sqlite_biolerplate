@@ -51,7 +51,6 @@ def token_required(f):
             data = {"_id": str(authUser["_id"]), "username": authUser["username"], "firstName": authUser["firstName"], "lastName": authUser["lastName"], "_id": authUser["_id"]}
         except Exception as e:
             return make_response(jsonify({'message': 'unautorized'}), 401)
-
         return f(data, *args, **kwargs)
     return decorator
 
@@ -143,6 +142,33 @@ def login():
         return response
 
 
+@app.route('/user', methods=['DELETE'])
+@token_required
+def delete_user(authUser):
+    try:
+        print('authUser...', authUser)
+
+        # delete all targets of provided user.
+
+        targetResponse = db.targets.delete_many({'user': authUser['_id']})
+
+        # convert auth user into object id
+        user_id = ObjectId(authUser["_id"])
+        print('user id...', user_id)
+        # if found, delete user
+        result = db.users.delete_one({'_id': user_id})
+        print('result...', result)
+        if result.deleted_count == 1:
+            return jsonify({'message': 'User deleted successfully'})
+
+        else:
+            return jsonify({'error': 'Error deleting user'})
+
+    except Exception as exp:
+        print('exception...', exp)
+        return jsonify({'error': 'Error while deleting user'})
+
+
 @app.route('/user/seed', methods=['GET'])
 def seed():
     try:
@@ -203,6 +229,7 @@ def setUserTargets(authUser):
     except Exception as e:
         errResponse = make_response(jsonify({"message": e}), 500)
         return response
+
 
 
 @app.route('/user/targets/keywords', methods=['GET'])
