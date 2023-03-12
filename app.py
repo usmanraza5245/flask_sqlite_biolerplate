@@ -22,7 +22,7 @@ from utils.util import Utils
 import time
 from apscheduler.schedulers.background import BackgroundScheduler
 
-
+from jwt.exceptions import ExpiredSignatureError
 # Github Token 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
 # Github user ratroot92
 
@@ -45,10 +45,7 @@ def token_required(f):
         if not token:
             return Utils.UnauthorizedResponse('Missing access token.')
         try:
-            print(token)
             tokenPayload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            print(tokenPayload)
-
             authUser = db.users.find_one({'_id': ObjectId(tokenPayload['_id'])})
             if authUser:
                 authUser['_id'] = str(authUser['_id'])
@@ -56,8 +53,8 @@ def token_required(f):
             else:
                 return Utils.UnauthorizedResponse('User not found.')
             # data = {"_id": str(authUser["_id"]), "username": authUser["username"], "firstName": authUser["firstName"], "lastName": authUser["lastName"], "_id": authUser["_id"]}
-        except Exception as e:
-            return Utils.UnauthorizedResponse(e)
+        except ExpiredSignatureError as e:
+            return Utils.UnauthorizedResponse("Error: {}".format(str(e)))
 
     return decorator
 
@@ -92,8 +89,6 @@ def createUser(authUser):
         else:
             return Utils.NotFoundResponse(exists, "User already exists")
     except Exception as e:
-        print(e)
-
         return Utils.ErrorResponse('Someting went wrong.')
 
 
@@ -131,7 +126,6 @@ def login():
             response = make_response(jsonify({"data": data, "message": "Logged in successfully", "success": True, "token": token}), 200)
             return response
     except Exception as e:
-        print(e)
         return Utils.ErrorResponse('Someting went wrong.')
 
 
@@ -154,7 +148,6 @@ def delete_user(authUser):
             return "User not FOund"
 
     except Exception as e:
-        print(e)
         return Utils.ErrorResponse('Someting went wrong.')
 
 
@@ -208,7 +201,6 @@ def setUserTargets(authUser):
             return response
 
     except Exception as e:
-        print(e)
         return Utils.ErrorResponse('Someting went wrong.')
 
 
@@ -254,7 +246,6 @@ def updateUserTargets(authUser):
         else:
             return Utils.NotFoundResponse({}, "Target not found.")
     except Exception as e:
-        print(e)
         return Utils.ErrorResponse('Someting went wrong.')
 
 
@@ -264,10 +255,17 @@ def deleteUserTargets(authUser):
     try:
         reqBody = request.get_json()
         if 'targetType' not in reqBody:
-            return jsonify({"success": False, 'message': 'targetType is required.'}), 400
+            return Utils.BadRequestResponse('targetType is required.')
         else:
-            db.targets.delete_many({'user': authUser['_id']})
-            return Utils.SuccessResponse(authUser['_id'], "All users targets deleted successfully")
+            userTarget = db.targets.find_one({'user': authUser['_id'], 'targetType': reqBody['targetType']})
+            if userTarget:
+                result = db.targets.delete_one({'user': authUser['_id'], 'targetType': reqBody['targetType']})
+                if result.deleted_count == 1:
+                    return Utils.SuccessResponse(reqBody, 'Target deleted successfully.')
+                else:
+                    return Utils.NotFoundResponse('Failed to delete '+reqBody['targetType']+" target.")
+            else:
+                return Utils.NotFoundResponse("Target not found")
     except Exception as e:
         return Utils.ErrorResponse('Someting went wrong.')
 
