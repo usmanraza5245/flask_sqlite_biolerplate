@@ -19,6 +19,9 @@ import jwt
 import datetime
 from multiprocessing import Process
 from utils.util import Utils
+import time
+from apscheduler.schedulers.background import BackgroundScheduler
+
 
 # Github Token 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
 # Github user ratroot92
@@ -217,6 +220,18 @@ def deleteUserTargets(authUser):
             return Utils.SuccessResponse(authUser['_id'], "All users targets deleted successfully")
     except Exception as e:
         return Utils.ErrorResponse('Someting went wrong.')
+
+
+def my_scheduler():
+    print("Scheduler function called")
+
+
+@app.before_first_request
+def activate_scheduler():
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(func=my_scheduler, trigger='interval', seconds=10)
+    scheduler.start()
+    print("Scheduler started")
 
 
 if __name__ == '__main__':
