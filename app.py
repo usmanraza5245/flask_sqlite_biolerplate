@@ -43,16 +43,22 @@ def token_required(f):
         if 'x-access-tokens' in request.headers:
             token = request.headers['x-access-tokens']
         if not token:
-            print(">>>>>>>>>>>>>>", request.headers['x-access-tokens'])
             return Utils.UnauthorizedResponse('Missing access token.')
         try:
+            print(token)
             tokenPayload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            print(tokenPayload)
+
             authUser = db.users.find_one({'_id': ObjectId(tokenPayload['_id'])})
-            authUser['_id'] = str(authUser['_id'])
+            if authUser:
+                authUser['_id'] = str(authUser['_id'])
+                return f(authUser, *args, **kwargs)
+            else:
+                return Utils.UnauthorizedResponse('User not found.')
             # data = {"_id": str(authUser["_id"]), "username": authUser["username"], "firstName": authUser["firstName"], "lastName": authUser["lastName"], "_id": authUser["_id"]}
         except Exception as e:
             return Utils.UnauthorizedResponse(e)
-        return f(authUser, *args, **kwargs)
+
     return decorator
 
 
@@ -84,8 +90,10 @@ def createUser(authUser):
             # data = {"_id": str(user["_id"]), "username": user["username"], "firstName": user["firstName"], "lastName": user["lastName"], "email": user["email"]}
             return Utils.SuccessResponse(user, "User created successfully")
         else:
-            return Utils.NotFoundResponse(user, "User already exists")
+            return Utils.NotFoundResponse(exists, "User already exists")
     except Exception as e:
+        print(e)
+
         return Utils.ErrorResponse('Someting went wrong.')
 
 
@@ -111,7 +119,9 @@ def login():
             return Utils.BadRequestResponse('email is required.')
         if 'password' not in reqBody:
             return Utils.BadRequestResponse('password is required.')
+
         user = User.UserExists({'email': reqBody['email'], 'password': reqBody['password']})
+        print(user)
         if not user:
             return Utils.UnauthorizedResponse('Invalid credentials.')
         else:
@@ -129,15 +139,22 @@ def login():
 @token_required
 def delete_user(authUser):
     try:
-        db.targets.delete_many({'user': authUser['_id']})
-        userId = ObjectId(authUser["_id"])
-        result = db.users.delete_one({'_id': userId})
-        if result.deleted_count == 1:
-            return Utils.SuccessResponse(result, "User deleted successfully")
+        reqBody = request.get_json()
+        if '_id' not in reqBody:
+            return Utils.BadRequestResponse('_id is required.')
+        user = db.users.find_one({'_id': ObjectId(reqBody['_id'])})
+        if user:
+            db.targets.delete_many({'user': ObjectId(reqBody['_id'])})
+            result = db.users.delete_one({'_id': ObjectId(authUser["_id"])})
+            if result.deleted_count == 1:
+                return Utils.SuccessResponse({}, "User deleted successfully")
+            else:
+                return Utils.NotFoundResponse(reqBody, 'Error deleting user')
         else:
-            return Utils.NotFoundResponse(userId, 'Error deleting user')
+            return "User not FOund"
 
     except Exception as e:
+        print(e)
         return Utils.ErrorResponse('Someting went wrong.')
 
 
@@ -183,8 +200,8 @@ def setUserTargets(authUser):
             target = db.targets.find_one({'_id': target.inserted_id})
             target['_id'] = str(target['_id'])
             target['user'] = str(target['user'])
-            # heavyTask = Process(target=scrapLater, args=(target,))
-            # heavyTask.start()
+            heavyTask = Process(target=scrapLater, args=(target,))
+            heavyTask.start()
             return Utils.SuccessResponse(target, "Target created successfully")
         else:
             response = Utils.NotFoundResponse(exist, "Target Type '" + reqBody["targetType"]+"' already exists.")
@@ -265,7 +282,7 @@ def my_scheduler():
 @app.before_first_request
 def activate_scheduler():
     scheduler = BackgroundScheduler(daemon=True)
-    scheduler.add_job(func=my_scheduler, trigger='interval', seconds=10)
+    scheduler.add_job(func=my_scheduler, trigger='interval', seconds=60)
     scheduler.start()
     print(" >>> Scheduler started")
 
